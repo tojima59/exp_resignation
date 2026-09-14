@@ -181,7 +181,7 @@ async function agree(){
     const j = await res.json();
     if(j.dup){
       render(`<div class="card center"><h2>ご参加について</h2>
-      <p>このワーカーIDでは既にご回答いただいています。本調査は1人1回までです。<br>ご協力ありがとうございました。</p></div>`);
+      <p>本調査は1人1回までです。<br>ご協力ありがとうございました。</p></div>`);
       return;
     }
     S.pid = j.pid; S.arm = j.arm;
@@ -238,27 +238,10 @@ function screenScreening(){
 function saveScreening(){
   if(!need(["quit","know","used"])) return;
   S.d.quit_exp=val("quit"); S.d.awareness=val("know"); S.d.used_daiko=val("used");
-  if(S.d.used_daiko === "退職代行を利用した"){ S.route="experienced"; return screenExperienced(); }
+  if(S.d.used_daiko === "退職代行を利用した"){ S.route="experienced"; return screenDebrief(); }
   screenPre();
 }
 
-/* 利用経験者ルート（分析対象外・記述用） */
-function screenExperienced(){
-  render(`<div class="card">
-  <h2>退職代行を利用されたご経験について</h2>
-  <p>退職代行を利用されたことのある方には、別の質問にお答えいただいています。</p>
-  <h3>退職代行を使う人への、あなたのイメージ</h3>${scale7("eimg","とても悪い","とても良い")}
-  <h3>退職代行を利用したときのことを、差し支えのない範囲でお書きください</h3>
-  <p class="small">利用した理由、利用してみての感想など。書きたくない場合は空欄で構いません。</p>
-  <textarea id="etext" rows="4" placeholder="（任意）"></textarea>
-  <button class="main" onclick="saveExperienced()">次へ</button></div>`);
-}
-function saveExperienced(){
-  if(!need(["eimg"])) return;
-  S.d.exp_image = num("eimg");
-  S.d.exp_text = document.getElementById("etext").value.slice(0,1000);
-  screenDebrief();
-}
 
 /* ==================================================================
    4. 事前測定
