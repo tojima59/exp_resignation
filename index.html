@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>働き方に関する意識調査</title>
+<style>
+  :root { --navy:#1f3b66; --blue:#2e5b9e; --accent:#b03a2e; --green:#1e6b3a; --bg:#f5f7fa; --line:#ccd; }
+  * { box-sizing:border-box; }
+  body { font-family:"Hiragino Sans","Yu Gothic",Meiryo,sans-serif; background:var(--bg); margin:0; color:#222; line-height:1.7; }
+  #app { max-width:640px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border-radius:12px; padding:20px; margin:12px 0; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  h1 { font-size:1.25rem; color:var(--navy); margin-top:0; }
+  h2 { font-size:1.05rem; color:var(--blue); border-bottom:2px solid var(--blue); padding-bottom:4px; margin-top:0; }
+  h3 { font-size:.98rem; color:var(--navy); margin:18px 0 6px; }
+  p { margin:.6em 0; }
+  button.main { display:block; width:100%; padding:14px; font-size:1.05rem; background:var(--blue); color:#fff; border:none; border-radius:8px; cursor:pointer; margin-top:18px; }
+  button.main:disabled { background:#aab; cursor:default; }
+  button.main:focus-visible, label.opt:focus-within, label.sc:focus-within { outline:3px solid #f0a500; outline-offset:2px; }
+  label.opt { display:block; padding:9px 12px; border:1px solid var(--line); border-radius:8px; margin:6px 0; cursor:pointer; background:#fff; }
+  label.opt:has(input:checked) { border-color:var(--accent); background:#fdf2f0; }
+  label.opt input { margin-right:8px; }
+  .scale { margin:6px 0 14px; }
+  .sc-row { display:flex; gap:4px; }
+  .sc { flex:1; text-align:center; border:1px solid var(--line); border-radius:8px; padding:10px 0; cursor:pointer; background:#fff; font-size:.95rem; position:relative; }
+  .sc:has(input:checked) { border-color:var(--accent); background:#fdf2f0; font-weight:700; }
+  .sc input { position:absolute; opacity:0; width:0; height:0; }
+  .sc-anchor { display:flex; justify-content:space-between; font-size:.78rem; color:#666; margin-top:4px; }
+  .info { background:#fff; border:1px solid var(--line); border-left:5px solid var(--navy); border-radius:0 8px 8px 0; padding:14px 16px; margin:10px 0; }
+  .info p { margin:0 0 .9em; }
+  .info .src { font-size:.78rem; color:#666; margin:0; }
+  .warn { background:#fbeeec; border-left:4px solid var(--accent); padding:9px 12px; font-size:.92rem; margin:10px 0; }
+  .ok { background:#eaf3ec; border-left:4px solid var(--green); padding:9px 12px; margin:10px 0; }
+  .small { font-size:.82rem; color:#666; }
+  .center { text-align:center; }
+  .big { font-size:1.5rem; font-weight:700; color:var(--navy); letter-spacing:.12em; margin:.3em 0; }
+  input[type=text], select, textarea { width:100%; padding:10px; font-size:1rem; border:1px solid var(--line); border-radius:8px; font-family:inherit; }
+  .consent-box { max-height:260px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:12px; font-size:.86rem; background:#fafbfc; }
+  .dbrf h3 { border-left:4px solid var(--blue); padding-left:8px; }
+  .dbrf ul { padding-left:1.2em; }
+  .dbrf li { margin:.3em 0; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+
+/* ==================================================================
+   設定（実施者が編集する箇所）
+   ================================================================== */
+const GAS_URL   = "https://script.google.com/macros/s/AKfycbyddkBrfcm3N9ZImCJh9MBJy23mHxUj8ellRWXIGrBxs-DpIqN3dSL229EB29fK4EReDA/exec";      // gas_backend.gs をデプロイして得た .../exec を貼る
+const FORCE_ARM = null;    // テスト用に群を固定："CTRL"（統制版）/ "FACT"（実態版）。本番は null
+
+const MIN_READ_MS       = 10000; // 情報ページの最低表示時間（ミリ秒）
+const USE_FILLER        = false; // 情報と事後測定の間にフィラー2問を挟むか
+const USE_INFO_CHOICE   = false; // 行動アウトカム（まとめを読むか・実読時間）を測るか
+const USE_IMG3          = false; // イメージ尺度に3項目目（逆転項目）を加えるか
+const REQUIRE_WORKER_ID = false;  // ワーカーID必須（重複参加の検出のみに使う。回答データには保存しない）
+
+/* ==================================================================
+   情報カード（処置）
+   ── 数値はすべてパーソル総合研究所「離職の変化と退職代行に関する
+      定量調査」(2025) の報告書に基づく。
+      統制版＝上司の側から見た実態／実態版＝利用者の側から見た実態。
+      段落数（3）・数値の個数（7）・出所表記・URLは両群で揃えてある。
+   ================================================================== */
+const INFO = {
+  CTRL: {
+    label: "統制版（上司の側から見た実態）",
+    html: `
+      <p>パーソル総合研究所の2025年の調査によると、退職代行の利用者は離職者の約5%です。利用者は20〜30代が半数以上を占めています。利用料金は「2万円台」が約4割（42.3%）で最も多く、5万円以上の人も17.3%いました。</p>
+      <p>この調査では、部下に退職代行を使われた上司にも、そのときの対応をたずねています。約7割（69.6%）が人事やさらに上の上司に報告・相談しており、約5割が「残ったメンバーへのフォローや説明が必要だと感じた」「職場のコミュニケーションやマネジメントを見直すきっかけになった」と答えています。</p>
+      <p>そのときの上司の感情としては「驚きや動揺を感じた」が最も多く（43.5%）、一方で「特に大きな感情はなかった」と答えた上司も45.7%いました。</p>
+      <p class="src">出所：パーソル総合研究所「離職の変化と退職代行に関する定量調査」<br>https://rc.persol-group.co.jp/thinktank/data/resignation/</p>`
+  },
+  FACT: {
+    label: "実態版（利用者の側から見た実態）",
+    html: `
+      <p>パーソル総合研究所の2025年の調査によると、退職代行の利用者は離職者の約5%です。利用者は20〜30代が半数以上を占め、利用理由の上位には「上司への恐怖心があった」（28.8%）が入っています。</p>
+      <p>この調査では、利用者が置かれていた職場の状況もたずねています。「職場で孤立しているように思う」と答えた人は約4割（40.4%）、上司からハラスメントを受けたと答えた人も約4割（42.3%）にのぼります。相談相手は直属の上司に偏っており（23.1%）、自部門の同僚に相談する人は1割（9.6%）にとどまります。</p>
+      <p>また、退職代行の利用者は、利用していない離職者と比べて「周りの人たちと密に力を合わせて働きたい」というチームワーク志向がむしろ強く、会社や同僚に「申し訳ない」という思いを抱えている人が多いと報告されています。</p>
+      <p class="src">出所：パーソル総合研究所「離職の変化と退職代行に関する定量調査」<br>https://rc.persol-group.co.jp/thinktank/data/resignation/</p>`
+  }
+};
+
+/* 操作確認：選択肢は両群共通。正解だけが群で異なる。 */
+const MC_OPTIONS = [
+  "上司の側が退職代行をどう受け止めたかについて述べていた",
+  "利用者が職場で置かれていた状況について述べていた",
+  "退職代行を利用したある人の体験談だった",
+  "日本の労働市場全体の統計について述べていた"
+];
+const MC_CORRECT = { CTRL: 0, FACT: 1 };
+
+/* イメージ尺度（合成）。rev:true の項目は 8−x で逆転して平均する。 */
+const IMG_ITEMS = [
+  { key:"img1", text:"退職代行を使う人への、あなたのイメージ", left:"とても悪い", right:"とても良い", rev:false },
+  { key:"img2", text:"「退職代行を使う人の気持ちは理解できる」", left:"全くそう思わない", right:"とてもそう思う", rev:false }
+];
+if (USE_IMG3) IMG_ITEMS.push(
+  { key:"img3", text:"「退職代行を使う人に対して、否定的な印象を持つ」", left:"全くそう思わない", right:"とてもそう思う", rev:true }
+);
+
+/* ==================================================================
+   状態
+   ================================================================== */
+const S = { pid:null, arm:null, hp:"", route:"main", code:null, sending:false, d:{} };
+const app = document.getElementById("app");
+const TLOG = [];
+let tScreen = Date.now();
+
+function render(html){
+  const now = Date.now();
+  TLOG.push(now - tScreen);
+  tScreen = now;
+  app.innerHTML = html;
+  window.scrollTo(0,0);
+}
+function esc(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function radios(name, arr){
+  return arr.map(o=>`<label class="opt"><input type="radio" name="${name}" value="${esc(o)}">${esc(o)}</label>`).join("");
+}
+function radiosIdx(name, arr){
+  return arr.map((o,i)=>`<label class="opt"><input type="radio" name="${name}" value="${i}">${esc(o)}</label>`).join("");
+}
+function scale7(name, left, right){
+  let h = `<div class="scale"><div class="sc-row">`;
+  for(let i=1;i<=7;i++) h += `<label class="sc"><input type="radio" name="${name}" value="${i}"><span>${i}</span></label>`;
+  h += `</div><div class="sc-anchor"><span>${esc(left)}</span><span>${esc(right)}</span></div></div>`;
+  return h;
+}
+function val(name){
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : null;
+}
+function num(name){ const v=val(name); return v===null?null:Number(v); }
+function need(names){
+  for(const n of names){ if(val(n)===null){ alert("すべての項目にお答えください。"); return false; } }
+  return true;
+}
+
+/* ==================================================================
+   1. 同意
+   ================================================================== */
+function screenConsent(){
+  render(`<div class="card">
+  <h1>働き方に関する意識調査</h1>
+  <p>私たちは働き方に関する学術的な調査を実施しています。回答時間はおおよそ8〜10分です。</p>
+  <div class="consent-box">
+    <b>＜注意事項＞</b>
+    <p>本調査の結果は研究目的以外に使用いたしません。また、私たちが受け取るデータは個人が特定できないように処理されたものになりますので、私たちが回答者を特定することはありません。</p>
+    <p>得られたデータは研究実施者のコンピュータにデジタル形式で記録・保管されます。分析結果は、個人が特定されるような情報を含まないかたちで、学会で発表したり学術雑誌およびデータベース上等で公表したりする可能性があります。</p>
+    <p>回答開始後でも、<b>最後の送信ボタンを押す前であれば</b>、いつでも協力への同意を撤回し、回答をやめることができます。撤回される際は、送信せずにブラウザを閉じてください。その場合、ご回答は一切記録されません。なお、送信後のデータは匿名化されているため、同意を撤回することができませんのでご注意ください。</p>
+    <p>調査の最後に<b>完了コード</b>が表示されます。そのコードを募集ページに入力してください。コードはあらかじめ用意された一覧から配布されるもので、ご回答の内容とは結びついていません。</p>
+  </div>
+  ${REQUIRE_WORKER_ID ? `
+  <h3>クラウドソーシングのワーカーID</h3>
+  <p class="small">二重回答を防ぐためだけに使用します。回答データには保存されず、ご回答と結びつくことはありません。</p>
+  <input type="text" id="wid" placeholder="例：abcd1234" autocomplete="off">` : ``}
+  <div style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">
+    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+  </div>
+  <button class="main" onclick="agree()">注意事項に同意して回答を始める</button>
+  <p class="small center">同意いただけない場合は、このままブラウザを閉じてください。</p>
+  </div>`);
+}
+
+async function agree(){
+  let w = "";
+  if(REQUIRE_WORKER_ID){
+    w = (document.getElementById("wid").value||"").trim();
+    if(!/^[A-Za-z0-9_@.\-]{3,40}$/.test(w)){ alert("ワーカーIDを半角英数字で入力してください。"); return; }
+  }
+  S.hp = (document.getElementById("website").value||"");
+  S.d.consent_ts = new Date().toISOString();
+  render(`<div class="card center"><p>準備しています…</p></div>`);
+  try{
+    const res = await fetch(`${GAS_URL}?action=assign&worker=${encodeURIComponent(w)}`);
+    const j = await res.json();
+    if(j.dup){
+      render(`<div class="card center"><h2>ご参加について</h2>
+      <p>このワーカーIDでは既にご回答いただいています。本調査は1人1回までです。<br>ご協力ありがとうございました。</p></div>`);
+      return;
+    }
+    S.pid = j.pid; S.arm = j.arm;
+  }catch(err){
+    S.pid = "local-" + Math.floor(Math.random()*1e9);
+    S.arm = Math.random()<0.5 ? "CTRL" : "FACT";
+    S.d.assign_offline = true;
+  }
+  if(FORCE_ARM) S.arm = FORCE_ARM;
+  screenDemog();
+}
+
+/* ==================================================================
+   2. 属性
+   ================================================================== */
+const INDUSTRIES = ["農林漁業","鉱業","建設業","製造業","卸売業・小売業","金融・保険業","不動産業",
+  "運輸・通信業","電気・ガス・水道・熱供給業","サービス業","教育","無職・学生","その他"];
+
+function screenDemog(){
+  render(`<div class="card">
+  <h2>あなたご自身についてお尋ねします</h2>
+  <h3>性別</h3>${radios("sex",["男性","女性","その他","回答しない"])}
+  <h3>年齢</h3>${radios("age",["18-22歳","23-27歳","28-34歳","35-44歳","45-54歳","55歳以上"])}
+  <h3>業種</h3>${radios("ind",INDUSTRIES)}
+  <div id="indOtherWrap" style="display:none"><input type="text" id="indOther" placeholder="業種をご記入ください"></div>
+  <h3>雇用形態</h3>${radios("emp",["正社員","契約・派遣","パート・アルバイト","無職・学生"])}
+  <h3>あなたの1週間の平均労働時間</h3>${radios("hrs",["働いていない","30時間未満","30〜40時間","40〜50時間","50時間以上"])}
+  <button class="main" onclick="saveDemog()">次へ</button></div>`);
+  document.querySelectorAll('input[name="ind"]').forEach(el=>{
+    el.addEventListener("change", ()=>{
+      document.getElementById("indOtherWrap").style.display = (el.value==="その他" && el.checked) ? "block" : "none";
+    });
+  });
+}
+function saveDemog(){
+  if(!need(["sex","age","ind","emp","hrs"])) return;
+  S.d.sex=val("sex"); S.d.age=val("age"); S.d.industry=val("ind");
+  S.d.industry_other = (document.getElementById("indOther")||{}).value || "";
+  S.d.employment=val("emp"); S.d.hours=val("hrs");
+  screenScreening();
+}
+
+/* ==================================================================
+   3. 退職経験・認知・スクリーニング
+   ================================================================== */
+function screenScreening(){
+  render(`<div class="card">
+  <h2>退職のご経験について</h2>
+  <h3>これまでに会社・アルバイトを「退職」した経験はありますか？</h3>${radios("quit",["はい","いいえ"])}
+  <h3>「退職代行サービス」を知っていますか？</h3>${radios("know",["よく知っている","聞いたことはある","知らない"])}
+  <h3>過去に退職代行を用いて退職されたことはありますか？</h3>${radios("used",["退職代行を利用した","退職代行を利用していない","退職した経験はない"])}
+  <button class="main" onclick="saveScreening()">次へ</button></div>`);
+}
+function saveScreening(){
+  if(!need(["quit","know","used"])) return;
+  S.d.quit_exp=val("quit"); S.d.awareness=val("know"); S.d.used_daiko=val("used");
+  if(S.d.used_daiko === "退職代行を利用した"){ S.route="experienced"; return screenExperienced(); }
+  screenPre();
+}
+
+/* 利用経験者ルート（分析対象外・記述用） */
+function screenExperienced(){
+  render(`<div class="card">
+  <h2>退職代行を利用されたご経験について</h2>
+  <p>退職代行を利用されたことのある方には、別の質問にお答えいただいています。</p>
+  <h3>退職代行を使う人への、あなたのイメージ</h3>${scale7("eimg","とても悪い","とても良い")}
+  <h3>退職代行を利用したときのことを、差し支えのない範囲でお書きください</h3>
+  <p class="small">利用した理由、利用してみての感想など。書きたくない場合は空欄で構いません。</p>
+  <textarea id="etext" rows="4" placeholder="（任意）"></textarea>
+  <button class="main" onclick="saveExperienced()">次へ</button></div>`);
+}
+function saveExperienced(){
+  if(!need(["eimg"])) return;
+  S.d.exp_image = num("eimg");
+  S.d.exp_text = document.getElementById("etext").value.slice(0,1000);
+  screenDebrief();
+}
+
+/* ==================================================================
+   4. 事前測定
+   ================================================================== */
+function imageBlock(prefix){
+  return IMG_ITEMS.map(it =>
+    `<h3>${it.text}</h3>${scale7(prefix+it.key, it.left, it.right)}`).join("");
+}
+function collectImage(prefix){
+  const names = IMG_ITEMS.map(it=>prefix+it.key);
+  if(!need(names)) return false;
+  let sum = 0;
+  IMG_ITEMS.forEach(it=>{
+    const v = num(prefix+it.key);
+    S.d[prefix+it.key] = v;
+    sum += it.rev ? (8 - v) : v;
+  });
+  S.d[prefix+"img_mean"] = Math.round((sum/IMG_ITEMS.length)*1000)/1000;
+  return true;
+}
+
+function screenPre(){
+  render(`<div class="card">
+  <h2>あなたご自身のお考えをお聞かせください</h2>
+  ${imageBlock("pre_")}
+  <h3>そのようなイメージを持つ理由を、一言でお書きください</h3>
+  <textarea id="prereason" rows="2" placeholder="（任意）"></textarea>
+  <h3>「退職は自分で対面で伝えるべきだ」</h3>${scale7("pre_norm","全くそう思わない","とてもそう思う")}
+  <h3>もし自分が「退職したいのに言い出しづらい」状況なら、退職代行を使う可能性</h3>
+  <p class="small">仮に自分が退職したいのに言い出しづらい状況だったと仮定してお答えください。</p>
+  ${scale7("pre_intent","全く使わない","必ず使う")}
+  <button class="main" onclick="savePre()">次へ</button></div>`);
+}
+function savePre(){
+  if(!collectImage("pre_")) return;
+  if(!need(["pre_norm","pre_intent"])) return;
+  S.d.pre_reason = document.getElementById("prereason").value.slice(0,500);
+  S.d.pre_norm = num("pre_norm"); S.d.pre_intent = num("pre_intent");
+  screenInfo();
+}
+
+/* ==================================================================
+   5. 情報カード（処置・最低10秒）
+   ================================================================== */
+function screenInfo(){
+  render(`<div class="card">
+  <h2>情報のご紹介</h2>
+  <p>次の情報をお読みください。</p>
+  <div class="warn">10秒経過するまで、「読み終えた」ボタンを押すことができません。</div>
+  <div class="info">${INFO[S.arm].html}</div>
+  <button class="main" id="infoBtn" disabled onclick="saveInfo()">読み終えた</button>
+  <p class="small center" id="infoNote"></p>
+  </div>`);
+  S._infoT0 = Date.now();
+  const btn = document.getElementById("infoBtn");
+  const note = document.getElementById("infoNote");
+  if(MIN_READ_MS <= 0){ btn.disabled = false; return; }
+  const tick = ()=>{
+    const left = Math.ceil((MIN_READ_MS - (Date.now()-S._infoT0))/1000);
+    if(left > 0){ note.textContent = `あと ${left} 秒お読みください`; setTimeout(tick, 250); }
+    else { btn.disabled = false; note.textContent = ""; }
+  };
+  tick();
+}
+function saveInfo(){
+  S.d.info_read_ms = Date.now() - S._infoT0;
+  if(USE_FILLER) screenFiller(); else screenPost();
+}
+
+/* 需要効果の緩衝用フィラー（既定では使わない） */
+function screenFiller(){
+  render(`<div class="card">
+  <h2>少し話題を変えて、働き方全般についてお尋ねします</h2>
+  <h3>「仕事は生活のための手段だと思う」</h3>${scale7("f1","全くそう思わない","とてもそう思う")}
+  <h3>「職場の人間関係は仕事の満足度を大きく左右すると思う」</h3>${scale7("f2","全くそう思わない","とてもそう思う")}
+  <button class="main" onclick="saveFiller()">次へ</button></div>`);
+}
+function saveFiller(){
+  if(!need(["f1","f2"])) return;
+  S.d.filler1=num("f1"); S.d.filler2=num("f2");
+  screenPost();
+}
+
+/* ==================================================================
+   6. 事後測定
+   ================================================================== */
+function screenPost(){
+  render(`<div class="card">
+  <h2>情報を読んだうえで、改めてあなたのお考えをお聞かせください</h2>
+  ${imageBlock("post_")}
+  <h3>「退職は自分で対面で伝えるべきだ」</h3>${scale7("post_norm","全くそう思わない","とてもそう思う")}
+  <h3>もし自分が「退職したいのに言い出しづらい」状況なら、退職代行を使う可能性</h3>
+  ${scale7("post_intent","全く使わない","必ず使う")}
+  <h3>「退職代行を使うなら、労働組合や弁護士が運営するものを選ぶべきだ」</h3>
+  <p class="small">退職代行にも様々な種類があります。労働組合や弁護士による退職代行と民間業者による退職代行では、合法的に代行できる範囲に違いがあり、料金体系にも違いがあります。</p>
+  ${scale7("post_legal","全くそう思わない","とてもそう思う")}
+  <button class="main" onclick="savePost()">次へ</button></div>`);
+}
+function savePost(){
+  if(!collectImage("post_")) return;
+  if(!need(["post_norm","post_intent","post_legal"])) return;
+  S.d.post_norm=num("post_norm"); S.d.post_intent=num("post_intent"); S.d.post_legal=num("post_legal");
+  screenChecks();
+}
+
+/* ==================================================================
+   7. 操作確認・注意チェック
+   ================================================================== */
+function screenChecks(){
+  render(`<div class="card">
+  <h2>確認のための質問</h2>
+  <h3>先ほど表示された文章の主旨はどれでしたか？</h3>
+  ${radiosIdx("mc", MC_OPTIONS)}
+  <h3>確認のため、この質問では「2」を選んでください</h3>
+  ${radios("attn",["1","2","3","4"])}
+  <button class="main" onclick="saveChecks()">次へ</button></div>`);
+}
+function saveChecks(){
+  if(!need(["mc","attn"])) return;
+  S.d.mc_answer = num("mc");
+  S.d.mc_pass = (S.d.mc_answer === MC_CORRECT[S.arm]);
+  S.d.attn_pass = (val("attn") === "2");
+  if(USE_INFO_CHOICE) screenInfoChoice(); else screenDebrief();
+}
+
+/* ==================================================================
+   8.（任意）行動アウトカム：まとめを読むか
+   ================================================================== */
+function screenInfoChoice(){
+  render(`<div class="card">
+  <h2>もう一つだけお尋ねします</h2>
+  <p>「合法的な退職手段（労働組合・弁護士による代行、公的な労働相談窓口）のまとめ」をご用意しています。お読みになる場合、次の画面が<b>30秒間</b>表示されます。読まない場合はそのまま進みます。</p>
+  ${radios("choice",["読む（30秒かかります）","読まずに進む"])}
+  <button class="main" onclick="saveInfoChoice()">次へ</button></div>`);
+}
+function saveInfoChoice(){
+  if(!need(["choice"])) return;
+  S.d.info_choice = (val("choice").indexOf("読む")===0);
+  if(!S.d.info_choice){ S.d.info_choice_ms = 0; return screenDebrief(); }
+  render(`<div class="card">
+  <h2>合法的な退職手段・相談窓口</h2>
+  ${LEGAL_HTML}
+  <button class="main" id="cBtn" disabled onclick="endInfoChoice()">次へ</button>
+  <p class="small center" id="cNote"></p></div>`);
+  S._choiceT0 = Date.now();
+  const btn=document.getElementById("cBtn"), note=document.getElementById("cNote");
+  const tick=()=>{ const left=Math.ceil((30000-(Date.now()-S._choiceT0))/1000);
+    if(left>0){ note.textContent=`あと ${left} 秒`; setTimeout(tick,250); } else { btn.disabled=false; note.textContent=""; } };
+  tick();
+}
+function endInfoChoice(){ S.d.info_choice_ms = Date.now()-S._choiceT0; screenDebrief(); }
+
+/* ==================================================================
+   9. デブリーフィング →（送信ボタンを押して初めて記録される）
+   ================================================================== */
+const LEGAL_HTML = `
+  <p>退職代行には3種類あります。<b>①民間業者</b>（退職の意思の伝達のみ）<b>②労働組合</b>（団体交渉が可能）<b>③弁護士</b>（未払い賃金請求など法的対応も可能）。民間業者は、会社との交渉や法的な請求を行うことはできません。</p>
+  <p>退職代行を使わなくても、退職の意思表示はいつでも可能です。期間の定めのない雇用では、申し入れから原則2週間で退職できます（民法627条）。費用をかけずに公的機関へ相談することもできます。</p>
+  <ul>
+    <li>厚生労働省 総合労働相談コーナー（全国の窓口一覧）<br>
+      <a href="https://www.mhlw.go.jp/general/seido/chihou/kaiketu/soudan.html" target="_blank" rel="noopener">https://www.mhlw.go.jp/general/seido/chihou/kaiketu/soudan.html</a></li>
+    <li>日本労働組合総連合会（連合）労働相談ホットライン<br>
+      <a href="https://www.jtuc-rengo.or.jp/soudan/" target="_blank" rel="noopener">https://www.jtuc-rengo.or.jp/soudan/</a></li>
+    <li>法テラス（日本司法支援センター）<br>
+      <a href="https://www.houterasu.or.jp/" target="_blank" rel="noopener">https://www.houterasu.or.jp/</a></li>
+  </ul>`;
+
+function screenDebrief(){
+  render(`<div class="card dbrf">
+  <h1>調査は以上です。最後に本調査についてご説明します</h1>
+
+  <h3>この調査で行っていたこと</h3>
+  <p>本調査は、退職代行サービスに関する情報の<b>伝えられ方</b>が、人々の受け止め方にどう影響するかを調べる学術研究です。調査の途中でお読みいただいた文章について、あらかじめお伝えしていなかったことがありますので、ここでご説明します。</p>
+  <p>回答者の皆さまには、<b>2種類の文章のうちどちらか一方がランダムに表示されていました</b>。どちらの文章も、パーソル総合研究所「離職の変化と退職代行に関する定量調査」（2025年）に実際に掲載されている事実に基づいており、事実でない内容は含んでいません。ただし、<b>同じ調査の中から異なる側面を選んで構成</b>しています。一方は部下に退職代行を使われた上司の側から見た状況を、もう一方は利用者の側から見た状況を取り上げていました。</p>
+  <p>どちらか一方だけをお読みになると、退職代行について一面的な印象を持たれる可能性があります。そのため、調査結果の全体像を以下にお示しします。</p>
+
+  <h3>調査で報告されている内容（両面）</h3>
+  <ul>
+    <li>退職代行の利用者は、正社員の離職経験者のうち約5%（約20人に1人）です。利用料金は2万円台が最も多くなっています。</li>
+    <li>利用理由で最も多いのは「すぐにでも退職したかったから」（約4割）、次いで「上司への恐怖心があった」（約3割）でした。</li>
+    <li>利用者は直属の上司との関係への不満が約7割、上司からのハラスメント経験が約4割と、職場環境に深刻な問題を抱えていた人が多いことが報告されています。職場で孤立している傾向も見られます。</li>
+    <li>同時に、利用者は「周りと力を合わせて働きたい」というチームワーク志向がむしろ強く、辞める会社や同僚に対して申し訳なさを感じている人が多いことも示されています。</li>
+    <li>一方で、部下に退職代行を使われた上司の側では、残されたメンバーへのフォローが必要になったと感じる人が約5割いました。上司の感情としては驚きや動揺が最も多く、特に大きな感情はなかったと答えた人も半数近くいます。</li>
+    <li>利用後に勤務先とのトラブルが「特になかった」人は約5割、金銭トラブル（未払い賃金等）が生じた人は約2割です。</li>
+  </ul>
+  <p class="small">報告書の全文：<a href="https://rc.persol-group.co.jp/thinktank/data/resignation/" target="_blank" rel="noopener">https://rc.persol-group.co.jp/thinktank/data/resignation/</a></p>
+  <p>本研究は、退職代行の利用を勧めるものでも、否定するものでもありません。</p>
+
+  <h3>合法的な退職手段・相談窓口</h3>
+  ${LEGAL_HTML}
+
+  <h3>データの取り扱い</h3>
+  <p class="small">ご回答は個人が特定できない形で処理され、研究目的のみに使用されます。完了コードはあらかじめ用意された一覧から配布されるもので、ご回答の内容とは結びついていません。</p>
+
+  <div class="warn"><b>ここまでは、ご回答はまだ記録されていません。</b>下のボタンを押した時点で送信され、完了コードが表示されます。送信せずにブラウザを閉じた場合、ご回答は一切記録されません。</div>
+  <button class="main" id="sendBtn" onclick="submitAll()">上記を確認した。回答を送信する</button>
+  </div>`);
+}
+
+/* ==================================================================
+   送信 → 完了コード
+   ================================================================== */
+function buildPayload(){
+  const total_ms = TLOG.reduce((a,b)=>a+b,0);
+  const min_screen_ms = TLOG.length > 1 ? Math.min.apply(null, TLOG.slice(1)) : 0;
+  return Object.assign({
+    pid:S.pid, arm:S.arm, route:S.route,
+    honeypot:S.hp, webdriver:!!navigator.webdriver,
+    total_ms:total_ms, min_screen_ms:min_screen_ms,
+    screen_ms:TLOG.join("|"), ua:(navigator.userAgent||"").slice(0,120)
+  }, S.d);
+}
+
+async function submitAll(){
+  if(S.sending) return;
+  S.sending = true;
+  const btn = document.getElementById("sendBtn");
+  if(btn) btn.disabled = true;
+  render(`<div class="card center"><p>送信しています…<br><span class="small">この画面を閉じないでください</span></p></div>`);
+  try{
+    await fetch(GAS_URL, {method:"POST", mode:"no-cors",
+      headers:{"Content-Type":"text/plain"}, body:JSON.stringify(buildPayload())});
+  }catch(err){}
+  await getCode(1);
+}
+
+async function getCode(attempt){
+  if(S.code) return showCode();
+  let err = null;
+  try{
+    const res = await fetch(`${GAS_URL}?action=code&pid=${encodeURIComponent(S.pid)}`);
+    const j = await res.json();
+    if(j.code){ S.code = j.code; return showCode(); }
+    err = j.error || "unknown";
+  }catch(e){ err = "network"; }
+
+  if(attempt < 6){
+    // 2回目の失敗時に一度だけ再送する（保存が届いていない可能性に備える）
+    if(attempt === 2){
+      try{ await fetch(GAS_URL,{method:"POST",mode:"no-cors",
+        headers:{"Content-Type":"text/plain"},body:JSON.stringify(buildPayload())}); }catch(e){}
+    }
+    render(`<div class="card center"><p>送信しています…（${attempt} / 6）<br>
+      <span class="small">この画面を閉じないでください</span></p></div>`);
+    await new Promise(r=>setTimeout(r, 2000));
+    return getCode(attempt+1);
+  }
+  showFailure(err);
+}
+
+function showCode(){
+  render(`<div class="card center">
+  <h1>ご協力ありがとうございました</h1>
+  <div class="ok">あなたの完了コード
+    <div class="big">${esc(S.code)}</div>
+    このコードを募集ページに入力してください。</div>
+  <p class="small">この画面を閉じる前に、必ずコードを控えてください。コードは一度しか使えません。</p>
+  </div>`);
+}
+
+function showFailure(err){
+  render(`<div class="card">
+  <h1>ご協力ありがとうございました</h1>
+  <div class="warn">
+    <p>ご回答は送信されましたが、完了コードの表示に失敗しました。</p>
+    <p>お手数ですが、完了コード欄に「完了コード取得失敗」とご入力ください。<b>謝礼は問題なくお支払いします。</b></p>
+  </div>
+  <button class="main" onclick="getCode(1)">もう一度コードを取得する</button>
+  <p class="small center">（${esc(err||"")}）</p>
+  </div>`);
+}
+
+/* ================= 起動 ================= */
+if(!GAS_URL){
+  render(`<div class="card"><h2>設定が必要です</h2>
+  <p class="small">index.html の <code>GAS_URL</code> に、デプロイしたウェブアプリのURLを貼り付けてください。</p></div>`);
+}else{
+  screenConsent();
+}
+</script>
+</body>
+</html>
